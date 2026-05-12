@@ -31,5 +31,10 @@
     },
     "scripts": {
         "test": "phpunit"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "config": {
+        "optimize-autoloader": true
     }
 }
