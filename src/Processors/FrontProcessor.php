@@ -9,103 +9,164 @@ class FrontProcessor implements FrontProcessorInterface
 {
     public function processFront(Front $frontInfo, array $textToList): Front
     {
-        $findData = function (string $text): bool {
-            $text = preg_replace('/[^a-zA-Z0-9]/', '', trim($text));
-            return strlen($text) > 5;
-        };
+        // Find the Numero line (card number)
+        $numeroIdx = null;
+        foreach ($textToList as $i => $item) {
+            if (str_contains($item, 'Numero') || str_contains($item, 'Numer')) {
+                $numeroIdx = $i;
+                break;
+            }
+        }
+        if ($numeroIdx === null) {
+            return $frontInfo;
+        }
 
-        $startIndex = 0;
-        foreach ($textToList as $item) {
-            $listIndex = ['Numero', 'Numer'];
-            foreach ($listIndex as $index) {
-                if (str_contains($item, $index)) {
-                    $startIndex = array_search($item, $textToList, true);
+        $line0 = $textToList[$numeroIdx];
+        $frontInfo->cardNumber->value = trim(preg_replace('/[^0-9-]/', '', substr($line0, 6)));
+
+        // Get remaining lines after Numero
+        $remaining = array_values(array_slice($textToList, $numeroIdx + 1));
+
+        // Helper: find first line containing one of the keywords
+        $findLine = function (array $keywords, array $lines): ?int {
+            foreach ($lines as $i => $line) {
+                foreach ($keywords as $keyword) {
+                    if (str_contains($line, $keyword)) {
+                        return $i;
+                    }
                 }
             }
-        }
+            return null;
+        };
 
-        // PREMIERE LIGNE (Numero de carte)
-        if (isset($textToList[$startIndex])) {
-            $line0 = $textToList[$startIndex];
-            $frontInfo->cardNumber->value = trim(preg_replace('/[^0-9-]/', '', substr($line0, 6)));
-        }
-
-        // DEUXIEME LIGNE (Nom)
-        if (isset($textToList[$startIndex + 1])) {
-            $line1 = $textToList[$startIndex + 1];
-            if (!$findData($line1)) {
-                $startIndex += 1;
-                $line1 = $textToList[$startIndex + 1];
+        // Helper: extract date DD-MM-YYYY or DD/MM/YYYY -> DD/MM/YYYY
+        $extractDate = function (string $text): ?string {
+            if (preg_match('/(\d{2})[-\/](\d{2})[-\/](\d{4})/', $text, $m)) {
+                return $m[1] . '/' . $m[2] . '/' . $m[3];
             }
-            $frontInfo->lastName->value = trim(preg_replace('/[^A-Z]/', '', substr($line1, 3)));
+            return null;
+        };
+
+        // --- Nom ---
+        $nomIdx = $findLine(['Nom:'], $remaining);
+        if ($nomIdx !== null) {
+            $line = $remaining[$nomIdx];
+            $frontInfo->lastName->value = trim(preg_replace('/[^A-Z]/', '', substr($line, 3)));
+            unset($remaining[$nomIdx]);
+            $remaining = array_values($remaining);
         }
 
-        // TROISIEME LIGNE (Prenom)
-        if (isset($textToList[$startIndex + 2])) {
-            $line2 = $textToList[$startIndex + 2];
-            if (!$findData($line2)) {
-                $startIndex += 1;
-                $line2 = $textToList[$startIndex + 2];
+        // --- Prenom (may be merged with birth info) ---
+        $prenomIdx = $findLine(['Prenom:'], $remaining);
+        if ($prenomIdx !== null) {
+            $line = $remaining[$prenomIdx];
+            $afterLabel = substr($line, 6);
+
+            // Check if "Ne le" is on the same line (OCR merged case)
+            if (preg_match('/Ne le\s*:?\s*/i', $afterLabel, $m, PREG_OFFSET_CAPTURE)) {
+                $splitPos = $m[0][1];
+                $namePart = trim(substr($afterLabel, 0, $splitPos));
+                $restPart = trim(substr($afterLabel, $splitPos + strlen($m[0][0])));
+
+                $frontInfo->firstName->value = trim(preg_replace('/[^a-zA-Z- ]/', '', $namePart));
+
+                $date = $extractDate($restPart);
+                if ($date !== null) {
+                    $frontInfo->birthDate->value = $date;
+                }
+                if (preg_match('/Sexe\s*:?\s*([MF])/i', $restPart, $sm)) {
+                    $frontInfo->sex->value = strtoupper($sm[1]);
+                }
+                if (preg_match('/Sexe\s*:?\s*[MF]\s+(.+?)$/i', $restPart, $lm)) {
+                    $locStr = trim($lm[1]);
+                    $locStr = preg_replace('/^A\s+/i', '', $locStr);
+                    $locParts = explode('/', $locStr);
+                    $frontInfo->birthLocation->value = trim(preg_replace('/[^A-Z ]/', '', $locParts[0] ?? ''));
+                    $frontInfo->birthPrefecture->value = trim(preg_replace('/[^A-Z ]/', '', $locParts[1] ?? ''));
+                }
+            } else {
+                $frontInfo->firstName->value = trim(preg_replace('/[^a-zA-Z- ]/', '', $afterLabel));
             }
-            $frontInfo->firstName->value = trim(preg_replace('/[^a-zA-Z- ]/', '', substr($line2, 6)));
+
+            unset($remaining[$prenomIdx]);
+            $remaining = array_values($remaining);
         }
 
-        // QUATRIEME LIGNE (Naissance Sexe)
-        if (isset($textToList[$startIndex + 3])) {
-            $line3 = $textToList[$startIndex + 3];
-            if (!$findData($line3)) {
-                $startIndex += 1;
-                $line3 = $textToList[$startIndex + 3];
+        // --- Birth date / sex / location (if not already parsed from Prenom line) ---
+        if ($frontInfo->birthDate->value === null || $frontInfo->sex->value === null || $frontInfo->birthLocation->value === null) {
+            $neLeIdx = $findLine(['Ne le'], $remaining);
+            if ($neLeIdx !== null) {
+                $line = $remaining[$neLeIdx];
+
+                if ($frontInfo->birthDate->value === null) {
+                    $date = $extractDate($line);
+                    if ($date !== null) {
+                        $frontInfo->birthDate->value = $date;
+                    }
+                }
+                if ($frontInfo->sex->value === null) {
+                    $frontInfo->sex->value = trim(preg_replace('/[^MF]/', '', $line));
+                }
+                if ($frontInfo->birthLocation->value === null) {
+                    if (preg_match('/Sexe\s*:?\s*[MF]\s+(.+?)$/i', $line, $lm)) {
+                        $locStr = trim($lm[1]);
+                        $locStr = preg_replace('/^A\s+/i', '', $locStr);
+                        $locParts = explode('/', $locStr);
+                        $frontInfo->birthLocation->value = trim(preg_replace('/[^A-Z ]/', '', $locParts[0] ?? ''));
+                        $frontInfo->birthPrefecture->value = trim(preg_replace('/[^A-Z ]/', '', $locParts[1] ?? ''));
+                    }
+                }
+
+                unset($remaining[$neLeIdx]);
+                $remaining = array_values($remaining);
             }
-            $frontInfo->birthDate->value = trim(str_replace('-', '/', preg_replace('/[^0-9-]/', '', $line3)));
-            $frontInfo->sex->value = trim(preg_replace('/[^MF]/', '', $line3));
         }
 
-        // CINQUIEME LIGNE (Lieu de Naissance)
-        if (isset($textToList[$startIndex + 4])) {
-            $line4 = $textToList[$startIndex + 4];
-            if (!$findData($line4)) {
-                $startIndex += 1;
-                $line4 = $textToList[$startIndex + 4];
-            }
-            $line4 = str_replace(':', '', substr($line4, 1));
-            $line4Liste = explode('/', $line4);
+        // --- Profession + date de délivrance (may be merged) ---
+        $profIdx = $findLine(['Profession:'], $remaining);
+        if ($profIdx !== null) {
+            $line = $remaining[$profIdx];
 
-            $frontInfo->birthLocation->value = trim($line4Liste[0] ?? '');
-            $frontInfo->birthPrefecture->value = trim($line4Liste[1] ?? '');
+            $professionRaw = substr($line, 10);
+            if (preg_match('/^([A-Z ]+?)\s+Fait le\s*:/i', $professionRaw, $pm)) {
+                $frontInfo->profession->value = trim($pm[1]);
+            } else {
+                $frontInfo->profession->value = trim(preg_replace('/[^A-Z  -]/', '', $professionRaw));
+            }
+
+            if (preg_match('/Fait le\s*:?\s*(\d{2}[-\/]\d{2}[-\/]\d{4})/', $line, $fm)) {
+                $dateStr = str_replace('-', '/', $fm[1]);
+                $frontInfo->issueDate->value = $dateStr;
+            }
+            if (preg_match('/\d{2}[-\/]\d{2}[-\/]\d{4}[\/ ]+(\d+)/', $line, $om)) {
+                $frontInfo->policeOfficeNumber->value = $om[1];
+            }
+
+            unset($remaining[$profIdx]);
+            $remaining = array_values($remaining);
         }
 
-        // SIXIEME LIGNE (Profession)
-        if (isset($textToList[$startIndex + 5])) {
-            $line5 = $textToList[$startIndex + 5];
-            if (!$findData($line5)) {
-                $startIndex += 1;
-                $line5 = $textToList[$startIndex + 5];
+        // --- Date d'expiration ---
+        $expIdx = $findLine(['Expirele', 'Expire le', 'Expire'], $remaining);
+        if ($expIdx !== null) {
+            $line = $remaining[$expIdx];
+            $date = $extractDate($line);
+            if ($date !== null) {
+                $frontInfo->expiryDate->value = $date;
             }
-            $frontInfo->profession->value = trim(preg_replace('/[^A-Z  -]/', '', substr($line5, 10)));
+            unset($remaining[$expIdx]);
+            $remaining = array_values($remaining);
         }
 
-        // SEPTIEME LIGNE (Date de delivrance)
-        if (isset($textToList[$startIndex + 6])) {
-            $line6 = str_replace('O', '0', $textToList[$startIndex + 6]);
-            if (!$findData($line6)) {
-                $startIndex += 1;
-                $line6 = $textToList[$startIndex + 6];
+        // --- Fallback issueDate from remaining lines ---
+        if ($frontInfo->issueDate->value === null && $frontInfo->expiryDate->value === null) {
+            foreach ($remaining as $line) {
+                $date = $extractDate($line);
+                if ($date !== null) {
+                    $frontInfo->issueDate->value = $date;
+                    break;
+                }
             }
-            $line6Liste = explode('/', preg_replace('/[^0-9-\/]/', '', $line6));
-
-            $frontInfo->issueDate->value = trim(str_replace('-', '/', $line6Liste[0] ?? ''));
-            $frontInfo->policeOfficeNumber->value = trim($line6Liste[1] ?? '');
-        }
-
-        // HUITIEME LIGNE (Date d'expiration)
-        if (isset($textToList[$startIndex + 7])) {
-            $line7 = $textToList[$startIndex + 7];
-            if (!$findData($line7)) {
-                $startIndex += 1;
-                $line7 = $textToList[$startIndex + 7];
-            }
-            $frontInfo->expiryDate->value = trim(str_replace('-', '/', preg_replace('/[^-0-9]/', '', substr($line7, 4))));
         }
 
         return $frontInfo;

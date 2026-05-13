@@ -30,4 +30,12 @@ class Front
         $this->policeOfficeNumber = new ValueStat();
         $this->expiryDate = new ValueStat();
     }
+
+    public function __get(string $name): mixed
+    {
+        if ($name === 'dateOfBirth') {
+            return $this->birthDate;
+        }
+        throw new \RuntimeException("Property $name does not exist on Front");
+    }
 }
