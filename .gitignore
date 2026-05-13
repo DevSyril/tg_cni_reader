@@ -2,7 +2,7 @@
 /.phpunit.cache/
 /composer.lock
 /tests
-/data/recto.png
-/data/verso.png
+/data/recto.jpeg
+/data/verso.jpeg
 phpunit.xml
 vendor
