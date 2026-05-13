@@ -24,6 +24,12 @@ class FrontProcessor implements FrontProcessorInterface
         $line0 = $textToList[$numeroIdx];
         $frontInfo->cardNumber->value = trim(preg_replace('/[^0-9-]/', '', substr($line0, 6)));
 
+        // Check if "Nom:" is on the SAME line as Numero
+        if (str_contains($line0, 'Nom:')) {
+            $nomPart = substr($line0, strpos($line0, 'Nom:') + 4);
+            $frontInfo->lastName->value = trim(preg_replace('/[^A-Z]/', '', $nomPart));
+        }
+
         // Get remaining lines after Numero
         $remaining = array_values(array_slice($textToList, $numeroIdx + 1));
 
@@ -47,13 +53,15 @@ class FrontProcessor implements FrontProcessorInterface
             return null;
         };
 
-        // --- Nom ---
-        $nomIdx = $findLine(['Nom:'], $remaining);
-        if ($nomIdx !== null) {
-            $line = $remaining[$nomIdx];
-            $frontInfo->lastName->value = trim(preg_replace('/[^A-Z]/', '', substr($line, 3)));
-            unset($remaining[$nomIdx]);
-            $remaining = array_values($remaining);
+        // --- Nom (if not already on Numero line) ---
+        if ($frontInfo->lastName->value === null) {
+            $nomIdx = $findLine(['Nom:'], $remaining);
+            if ($nomIdx !== null) {
+                $line = $remaining[$nomIdx];
+                $frontInfo->lastName->value = trim(preg_replace('/[^A-Z]/', '', substr($line, 3)));
+                unset($remaining[$nomIdx]);
+                $remaining = array_values($remaining);
+            }
         }
 
         // --- Prenom (may be merged with birth info) ---
@@ -122,6 +130,27 @@ class FrontProcessor implements FrontProcessorInterface
             }
         }
 
+        // --- Birth location "A:" separate line ---
+        if ($frontInfo->birthLocation->value === null || $frontInfo->birthPrefecture->value === null) {
+            $aIdx = null;
+            foreach ($remaining as $i => $line) {
+                $trimmed = trim($line);
+                if (preg_match('/^A\s*:\s*/i', $trimmed)) {
+                    $aIdx = $i;
+                    break;
+                }
+            }
+            if ($aIdx !== null) {
+                $line = $remaining[$aIdx];
+                $afterA = preg_replace('/^A\s*:\s*/i', '', trim($line));
+                $locParts = explode('/', $afterA);
+                $frontInfo->birthLocation->value = trim(preg_replace('/[^A-Z -]/', '', $locParts[0] ?? ''));
+                $frontInfo->birthPrefecture->value = trim(preg_replace('/[^A-Z -]/', '', $locParts[1] ?? ''));
+                unset($remaining[$aIdx]);
+                $remaining = array_values($remaining);
+            }
+        }
+
         // --- Profession + date de délivrance (may be merged) ---
         $profIdx = $findLine(['Profession:'], $remaining);
         if ($profIdx !== null) {
@@ -158,12 +187,18 @@ class FrontProcessor implements FrontProcessorInterface
             $remaining = array_values($remaining);
         }
 
-        // --- Fallback issueDate from remaining lines ---
-        if ($frontInfo->issueDate->value === null && $frontInfo->expiryDate->value === null) {
+        // --- Fallback issueDate + policeOfficeNumber from remaining lines ---
+        if ($frontInfo->issueDate->value === null) {
             foreach ($remaining as $line) {
+                if (str_contains($line, 'Expire') || str_contains($line, 'Expirele')) {
+                    continue;
+                }
                 $date = $extractDate($line);
                 if ($date !== null) {
                     $frontInfo->issueDate->value = $date;
+                    if (preg_match('/\d{2}[-\/]\d{2}[-\/]\d{4}[\/ ]+(\d+)/', $line, $om)) {
+                        $frontInfo->policeOfficeNumber->value = $om[1];
+                    }
                     break;
                 }
             }
