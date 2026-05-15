@@ -1,15 +1,13 @@
 <?php
 
-namespace TgIdProcessor\Processors;
+namespace TgDocumentProcessor\Drivers\Cni\Parsers;
 
-use TgIdProcessor\Contracts\FrontProcessorInterface;
-use TgIdProcessor\Models\Front;
+use TgDocumentProcessor\Drivers\Cni\Models\CniFront;
 
-class FrontProcessor implements FrontProcessorInterface
+class CniFrontParser
 {
-    public function processFront(Front $frontInfo, array $textToList): Front
+    public function parse(CniFront $frontInfo, array $textToList): CniFront
     {
-        // Find the Numero line (card number)
         $numeroIdx = null;
         foreach ($textToList as $i => $item) {
             if (str_contains($item, 'Numero') || str_contains($item, 'Numer')) {
@@ -24,16 +22,13 @@ class FrontProcessor implements FrontProcessorInterface
         $line0 = $textToList[$numeroIdx];
         $frontInfo->cardNumber->value = trim(preg_replace('/[^0-9-]/', '', substr($line0, 6)));
 
-        // Check if "Nom:" is on the SAME line as Numero
         if (str_contains($line0, 'Nom:')) {
             $nomPart = substr($line0, strpos($line0, 'Nom:') + 4);
             $frontInfo->lastName->value = trim(preg_replace('/[^A-Z]/', '', $nomPart));
         }
 
-        // Get remaining lines after Numero
         $remaining = array_values(array_slice($textToList, $numeroIdx + 1));
 
-        // Helper: find first line containing one of the keywords
         $findLine = function (array $keywords, array $lines): ?int {
             foreach ($lines as $i => $line) {
                 foreach ($keywords as $keyword) {
@@ -45,7 +40,6 @@ class FrontProcessor implements FrontProcessorInterface
             return null;
         };
 
-        // Helper: extract date DD-MM-YYYY or DD/MM/YYYY -> DD/MM/YYYY
         $extractDate = function (string $text): ?string {
             if (preg_match('/(\d{2})[-\/](\d{2})[-\/](\d{4})/', $text, $m)) {
                 return $m[1] . '/' . $m[2] . '/' . $m[3];
@@ -53,7 +47,6 @@ class FrontProcessor implements FrontProcessorInterface
             return null;
         };
 
-        // --- Nom (if not already on Numero line) ---
         if ($frontInfo->lastName->value === null) {
             $nomIdx = $findLine(['Nom:'], $remaining);
             if ($nomIdx !== null) {
@@ -64,13 +57,11 @@ class FrontProcessor implements FrontProcessorInterface
             }
         }
 
-        // --- Prenom (may be merged with birth info) ---
         $prenomIdx = $findLine(['Prenom:'], $remaining);
         if ($prenomIdx !== null) {
             $line = $remaining[$prenomIdx];
             $afterLabel = substr($line, 6);
 
-            // Check if "Ne le" is on the same line (OCR merged case)
             if (preg_match('/Ne le\s*:?\s*/i', $afterLabel, $m, PREG_OFFSET_CAPTURE)) {
                 $splitPos = $m[0][1];
                 $namePart = trim(substr($afterLabel, 0, $splitPos));
@@ -100,7 +91,6 @@ class FrontProcessor implements FrontProcessorInterface
             $remaining = array_values($remaining);
         }
 
-        // --- Birth date / sex / location (if not already parsed from Prenom line) ---
         if ($frontInfo->birthDate->value === null || $frontInfo->sex->value === null || $frontInfo->birthLocation->value === null) {
             $neLeIdx = $findLine(['Ne le'], $remaining);
             if ($neLeIdx !== null) {
@@ -130,7 +120,6 @@ class FrontProcessor implements FrontProcessorInterface
             }
         }
 
-        // --- Birth location "A:" separate line ---
         if ($frontInfo->birthLocation->value === null || $frontInfo->birthPrefecture->value === null) {
             $aIdx = null;
             foreach ($remaining as $i => $line) {
@@ -151,7 +140,6 @@ class FrontProcessor implements FrontProcessorInterface
             }
         }
 
-        // --- Profession + date de délivrance (may be merged) ---
         $profIdx = $findLine(['Profession:'], $remaining);
         if ($profIdx !== null) {
             $line = $remaining[$profIdx];
@@ -175,7 +163,6 @@ class FrontProcessor implements FrontProcessorInterface
             $remaining = array_values($remaining);
         }
 
-        // --- Date d'expiration ---
         $expIdx = $findLine(['Expirele', 'Expire le', 'Expire'], $remaining);
         if ($expIdx !== null) {
             $line = $remaining[$expIdx];
@@ -187,7 +174,6 @@ class FrontProcessor implements FrontProcessorInterface
             $remaining = array_values($remaining);
         }
 
-        // --- Fallback issueDate + policeOfficeNumber from remaining lines ---
         if ($frontInfo->issueDate->value === null) {
             foreach ($remaining as $line) {
                 if (str_contains($line, 'Expire') || str_contains($line, 'Expirele')) {

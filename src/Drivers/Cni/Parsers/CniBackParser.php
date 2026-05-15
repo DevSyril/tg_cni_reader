@@ -1,23 +1,14 @@
 <?php
 
-namespace TgIdProcessor\Processors;
+namespace TgDocumentProcessor\Drivers\Cni\Parsers;
 
-use TgIdProcessor\Contracts\BackProcessorInterface;
-use TgIdProcessor\Contracts\DigitCheckerInterface;
-use TgIdProcessor\Models\Back;
+use TgDocumentProcessor\Drivers\Cni\Models\CniBack;
+use TgDocumentProcessor\Tools\MrzParser;
 
-class BackProcessor implements BackProcessorInterface
+class CniBackParser
 {
-    private DigitCheckerInterface $digitChecker;
-
-    public function __construct(DigitCheckerInterface $digitChecker)
+    public function parse(CniBack $backInfo, array $textToList): array
     {
-        $this->digitChecker = $digitChecker;
-    }
-
-    public function processBack(Back $backInfo, array $textToList): array
-    {
-        // Helper: find line index by keyword
         $findLine = function (array $keywords, array $lines): ?int {
             foreach ($lines as $i => $line) {
                 foreach ($keywords as $keyword) {
@@ -29,7 +20,6 @@ class BackProcessor implements BackProcessorInterface
             return null;
         };
 
-        // Pre-process: extract embedded MRZ segments from merged lines
         $cleanedText = [];
         foreach ($textToList as $line) {
             if (str_contains($line, 'I<') && str_contains($line, '<<')) {
@@ -46,10 +36,8 @@ class BackProcessor implements BackProcessorInterface
             $cleanedText[] = $line;
         }
 
-        // Run DigitChecker with cleaned text (MRZ lines are now clean)
-        $check = $this->digitChecker->check($cleanedText, $backInfo);
+        $check = $this->checkMrz($cleanedText, $backInfo);
 
-        // --- Taille / Groupe sanguin / Domicile ---
         $tailleIdx = $findLine(['Taille', 'Taile', 'Taite', 'Talle'], $cleanedText);
         if ($tailleIdx !== null && isset($cleanedText[$tailleIdx])) {
             $line0 = str_replace([' CEL ', ' TEL '], '', $cleanedText[$tailleIdx]);
@@ -68,39 +56,31 @@ class BackProcessor implements BackProcessorInterface
             $cleanedText = array_values($cleanedText);
         }
 
-        // --- Signes particuliers (may be merged with Pere/Mere/Personne) ---
         $signesIdx = $findLine(['Signes particuliers'], $cleanedText);
         if ($signesIdx !== null && isset($cleanedText[$signesIdx])) {
             $line = $cleanedText[$signesIdx];
             $content = substr($line, strlen('Signes particuliers: '));
 
-            // Check if line contains "Pere:" (merged case)
             if (($perePos = stripos($content, 'Pere:')) !== false) {
-                // --- Particular sign ---
                 $sign = trim(substr($content, 0, $perePos));
                 $backInfo->particularSign->value = trim(preg_replace('/[^A-Z ]/', '', $sign));
 
-                // --- After "Pere:" ---
                 $afterPere = trim(substr($content, $perePos + 5));
 
                 if (($merePos = stripos($afterPere, 'Mere:')) !== false) {
-                    // Parse father
                     $pereStr = trim(substr($afterPere, 0, $merePos));
                     $pereParts = explode(',', $pereStr);
                     $backInfo->fatherLastName->value = trim($pereParts[0] ?? '');
                     $backInfo->fatherFirstName->value = trim($pereParts[1] ?? '');
 
-                    // --- After "Mere:" ---
                     $afterMere = trim(substr($afterPere, $merePos + 5));
 
                     if (($personPos = stripos($afterMere, 'Personne a prevenir')) !== false) {
-                        // Parse mother
                         $mereStr = trim(substr($afterMere, 0, $personPos));
                         $mereParts = explode(',', $mereStr);
                         $backInfo->motherLastName->value = trim($mereParts[0] ?? '');
                         $backInfo->motherFirstName->value = trim($mereParts[1] ?? '');
 
-                        // Parse person to contact
                         $personStr = ltrim(substr($afterMere, $personPos + strlen('Personne a prevenir')), ': ');
                         $personParts = explode(',', $personStr);
                         if (count($personParts) >= 1) {
@@ -120,26 +100,22 @@ class BackProcessor implements BackProcessorInterface
                             }
                         }
                     } else {
-                        // "Mere:" found but no "Personne a prevenir" - parse mother only
                         $mereStr = trim($afterMere);
                         $mereParts = explode(',', $mereStr);
                         $backInfo->motherLastName->value = trim($mereParts[0] ?? '');
                         $backInfo->motherFirstName->value = trim($mereParts[1] ?? '');
                     }
                 } else {
-                    // "Pere:" found but no "Mere:" - parse father only
                     $pereStr = trim($afterPere);
                     $pereParts = explode(',', $pereStr);
                     $backInfo->fatherLastName->value = trim($pereParts[0] ?? '');
                     $backInfo->fatherFirstName->value = trim($pereParts[1] ?? '');
                 }
 
-                // Extract document number from numeric sequences at line end
                 if (preg_match('/(\d{8,})\s*$/', $content, $dm)) {
                     $backInfo->documentNumber->value = $dm[1];
                 }
             } else {
-                // Original behavior: separate Signes particuliers line
                 $backInfo->particularSign->value = trim(preg_replace('/[^A-Z ]/', '', $content));
                 $docN = trim(preg_replace('/[^0-9]/', '', $content));
                 $backInfo->documentNumber->value = $docN;
@@ -149,7 +125,6 @@ class BackProcessor implements BackProcessorInterface
             $cleanedText = array_values($cleanedText);
         }
 
-        // --- Pere/Mere fallback (if not already parsed from merged Signes line) ---
         if ($backInfo->fatherLastName->value === null && $backInfo->fatherFirstName->value === null) {
             $pereIdx = $findLine(['Pere:'], $cleanedText);
             if ($pereIdx !== null && isset($cleanedText[$pereIdx])) {
@@ -182,7 +157,6 @@ class BackProcessor implements BackProcessorInterface
             }
         }
 
-        // --- Personne à prevenir fallback (if not parsed from merged line) ---
         if ($backInfo->personToContactName->value === null || $backInfo->personToContactTel->value === null) {
             $personIdx = $findLine(['Personne a prevenir'], $cleanedText);
             if ($personIdx !== null && isset($cleanedText[$personIdx])) {
@@ -211,7 +185,6 @@ class BackProcessor implements BackProcessorInterface
             }
         }
 
-        // --- MRZ Ligne3 (last name / first name from MRZ) ---
         $mrzLine3 = null;
         $linesWithChevrons = [];
         foreach ($cleanedText as $line) {
@@ -250,5 +223,57 @@ class BackProcessor implements BackProcessorInterface
         }
 
         return [$backInfo, $check];
+    }
+
+    private function checkMrz(array $backText, CniBack $backData): bool
+    {
+        $mrzLines = [];
+        foreach ($backText as $line) {
+            if (str_contains($line, '<<')) {
+                $mrzLines[] = $line;
+            }
+        }
+
+        if (count($mrzLines) !== 3) {
+            return false;
+        }
+
+        $docNumberLine = str_replace(' ', '', str_replace(['O', 'S'], ['0', '5'], $mrzLines[0]));
+        $docNumberLine = substr($docNumberLine, 4, 13);
+        $docNumberLine = preg_replace('/[^0-9]/', '', $docNumberLine);
+
+        $docCheck = '00' . ltrim(substr($docNumberLine, strpos($docNumberLine, '00')), '0');
+
+        $birthLine = str_replace(['O', 'S', ' '], ['0', '5', ''], str_replace('H', 'M', $mrzLines[1]));
+        $birthCheck = substr($birthLine, 0, 7);
+        $expiryCheck = substr($birthLine, 8, 7);
+
+        $check2FirstMRZLine = MrzParser::verifyCheckDigit($docCheck . $birthCheck . $expiryCheck, substr($birthLine, -1, 1));
+
+        $checkDocNumber = MrzParser::verifyCheckDigit(substr($docCheck, 0, 9), substr($docCheck, 9, 1));
+        $backData->mrzDocumentNumber->value = substr($docCheck, 1, 8);
+        $backData->mrzDocumentNumber->stat = $checkDocNumber;
+
+        $checkBirthDate = MrzParser::verifyCheckDigit(substr($birthCheck, 0, 6), substr($birthCheck, 6));
+        $birthYear = '20' . substr($birthLine, 0, 2);
+        if (!in_array(substr($birthLine, 0, 1), ['0', '1', '2'])) {
+            $birthYear = '19' . substr($birthLine, 0, 2);
+        }
+        $birthMonth = substr($birthLine, 2, 2);
+        $birthDay = substr($birthLine, 4, 2);
+        $sexe = substr($birthLine, 7, 1);
+
+        $backData->mrzSex->value = trim($sexe);
+        $backData->mrzBirthDate->value = "{$birthDay}/{$birthMonth}/{$birthYear}";
+        $backData->mrzBirthDate->stat = $checkBirthDate;
+
+        $checkExpiryDate = MrzParser::verifyCheckDigit(substr($expiryCheck, 0, 6), substr($expiryCheck, 6));
+        $expirationYear = '20' . substr($birthLine, 8, 2);
+        $expirationMonth = substr($birthLine, 10, 2);
+        $expirationDay = substr($birthLine, 12, 2);
+        $backData->mrzExpiryDate->value = "{$expirationDay}/{$expirationMonth}/{$expirationYear}";
+        $backData->mrzExpiryDate->stat = $checkExpiryDate;
+
+        return true;
     }
 }

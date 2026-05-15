@@ -1,8 +1,10 @@
 <?php
 
-namespace TgIdProcessor\Models;
+namespace TgDocumentProcessor\Drivers\Cni\Models;
 
-class Front
+use TgDocumentProcessor\Models\ValueStat;
+
+class CniFront
 {
     public ValueStat $cardNumber;
     public ValueStat $lastName;
@@ -36,6 +38,6 @@ class Front
         if ($name === 'dateOfBirth') {
             return $this->birthDate;
         }
-        throw new \RuntimeException("Property $name does not exist on Front");
+        throw new \RuntimeException("Property $name does not exist on CniFront");
     }
 }

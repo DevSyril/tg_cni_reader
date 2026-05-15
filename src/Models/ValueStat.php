@@ -1,6 +1,6 @@
 <?php
 
-namespace TgIdProcessor\Models;
+namespace TgDocumentProcessor\Models;
 
 class ValueStat
 {

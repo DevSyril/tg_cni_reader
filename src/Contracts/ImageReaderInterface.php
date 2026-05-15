@@ -1,6 +1,6 @@
 <?php
 
-namespace TgIdProcessor\Contracts;
+namespace TgDocumentProcessor\Contracts;
 
 interface ImageReaderInterface
 {

@@ -2,7 +2,8 @@
 /.phpunit.cache/
 /composer.lock
 /tests
-/data/recto.jpeg
-/data/verso.jpeg
+/data/cni
+/data/passport
+/data/driver-licence
 phpunit.xml
 vendor

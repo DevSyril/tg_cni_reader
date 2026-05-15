@@ -1,8 +1,10 @@
 <?php
 
-namespace TgIdProcessor\Models;
+namespace TgDocumentProcessor\Drivers\Cni\Models;
 
-class Back
+use TgDocumentProcessor\Models\ValueStat;
+
+class CniBack
 {
     public ValueStat $size;
     public ValueStat $bloodType;

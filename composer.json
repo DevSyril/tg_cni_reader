@@ -1,13 +1,15 @@
 {
-    "name": "devsyril/tg-cni-reader",
-    "version": "1.2.0",
-    "description": "Togolese National ID Card (CNI) OCR processor - extracts and validates data from CNI card images",
+    "name": "devsyril/tg-document-reader",
+    "version": "2.0.0",
+    "description": "Togolese identity documents OCR processor - extracts and validates data from CNI, passport, and driver license images",
     "type": "library",
     "license": "MIT",
     "readme": "README.md",
     "keywords": [
         "Togo",
         "CNI",
+        "Passport",
+        "Driver License",
         "OCR",
         "Identification",
         "Identity Card",
@@ -16,12 +18,12 @@
     ],
     "autoload": {
         "psr-4": {
-            "TgIdProcessor\\": "src/"
+            "TgDocumentProcessor\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "DevSyril\\CniReader\\Tests\\": "tests/"
+            "DevSyril\\DocumentReader\\Tests\\": "tests/"
         }
     },
     "authors": [

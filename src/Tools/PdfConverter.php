@@ -1,16 +1,17 @@
 <?php
 
-namespace TgIdProcessor\Tools;
+namespace TgDocumentProcessor\Tools;
 
-use TgIdProcessor\Contracts\PdfConverterInterface;
+use TgDocumentProcessor\Contracts\PdfConverterInterface;
 use Spatie\PdfToImage\Pdf;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\ImageManager;
 
 class PdfConverter implements PdfConverterInterface
 {
     private string $outputDir;
 
-    private ImageManager $imageManager;
+    private ?ImageManager $imageManager = null;
 
     private int $resolution;
 
@@ -18,7 +19,14 @@ class PdfConverter implements PdfConverterInterface
     {
         $this->outputDir = $outputDir ?: __DIR__ . '/../../data';
         $this->resolution = $resolution;
-        $this->imageManager = new ImageManager(['driver' => 'gd']);
+    }
+
+    private function getImageManager(): ImageManager
+    {
+        if ($this->imageManager === null) {
+            $this->imageManager = new ImageManager(new GdDriver());
+        }
+        return $this->imageManager;
     }
 
     public function transformPdfToImage(string $pdfPath): string
@@ -36,7 +44,7 @@ class PdfConverter implements PdfConverterInterface
 
         $pdf->saveImage($imagePath);
 
-        $image = $this->imageManager->make($imagePath);
+        $image = $this->getImageManager()->make($imagePath);
         $bounds = $this->findNonWhiteBounds($image);
         if ($bounds !== null) {
             $image->crop($bounds['width'], $bounds['height'], $bounds['x'], $bounds['y']);

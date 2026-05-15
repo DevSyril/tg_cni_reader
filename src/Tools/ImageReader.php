@@ -1,8 +1,8 @@
 <?php
 
-namespace TgIdProcessor\Tools;
+namespace TgDocumentProcessor\Tools;
 
-use TgIdProcessor\Contracts\ImageReaderInterface;
+use TgDocumentProcessor\Contracts\ImageReaderInterface;
 use thiagoalessio\TesseractOCR\TesseractOCR;
 
 class ImageReader implements ImageReaderInterface

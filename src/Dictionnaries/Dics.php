@@ -1,6 +1,6 @@
 <?php
 
-namespace TgIdProcessor\Dictionnaries;
+namespace TgDocumentProcessor\Dictionnaries;
 
 class Dics
 {

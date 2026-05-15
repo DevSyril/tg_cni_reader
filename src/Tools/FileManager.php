@@ -1,8 +1,9 @@
 <?php
 
-namespace TgIdProcessor\Tools;
+namespace TgDocumentProcessor\Tools;
 
 use Ramsey\Uuid\Uuid;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\ImageManager;
 
 class FileManager
@@ -14,7 +15,7 @@ class FileManager
     public function __construct(string $dataDir = '')
     {
         $this->dataDir = $dataDir ?: __DIR__ . '/../../data';
-        $this->imageManager = new ImageManager(['driver' => 'gd']);
+        $this->imageManager = new ImageManager(new GdDriver());
     }
 
     public function saveFile(string $sourcePath, ?string $fileName = null): string

@@ -1,17 +1,20 @@
 <?php
 
-namespace TgIdProcessor\Processors;
+namespace TgDocumentProcessor\Drivers\Cni\Validators;
 
-use TgIdProcessor\Contracts\AnalyserInterface;
-use TgIdProcessor\Dictionnaries\Dics;
-use TgIdProcessor\Models\Front;
-use TgIdProcessor\Models\Back;
-use TgIdProcessor\Models\Card;
+use TgDocumentProcessor\Dictionnaries\Dics;
+use TgDocumentProcessor\Drivers\Cni\Models\CniBack;
+use TgDocumentProcessor\Drivers\Cni\Models\CniCard;
+use TgDocumentProcessor\Drivers\Cni\Models\CniFront;
+use TgDocumentProcessor\Models\DocumentResult;
+use TgDocumentProcessor\Models\DocumentType;
 
-class Analyser implements AnalyserInterface
+class CniValidator
 {
-    public function compare(Front $front, Back $back): Card
+    public function validate(CniFront $front, CniBack $back, bool $mrzCheck): DocumentResult
     {
+        $result = new DocumentResult(DocumentType::CNI);
+
         $front->firstName->value = str_replace('-', ' ', $front->firstName->value);
         $firstNameIsCorrect = $front->firstName->value === $back->mrzFirstName->value;
 
@@ -101,16 +104,39 @@ class Analyser implements AnalyserInterface
         $cardNumberStr = $front->cardNumber->value ?? '';
         $front->cardNumber->stat = substr_count($cardNumberStr, '-') === 2 && strlen(str_replace('-', '', $cardNumberStr)) === 11;
 
-        $card = new Card();
-        $card->front = $front;
-        $card->back = $back;
-
         if (!empty($back->mrzExpiryDate->value)) {
             $expiry = \DateTimeImmutable::createFromFormat('d/m/Y', $back->mrzExpiryDate->value);
-            $card->isExpired = $expiry && $expiry < new \DateTimeImmutable();
+            $result->isExpired = $expiry && $expiry < new \DateTimeImmutable();
         }
 
-        return $card;
+        $result->isValid = $mrzCheck;
+        $result->addField('card_number', $front->cardNumber->value, $front->cardNumber->stat)
+            ->addField('last_name', $front->lastName->value, $front->lastName->stat)
+            ->addField('first_name', $front->firstName->value, $front->firstName->stat)
+            ->addField('birth_date', $front->birthDate->value, $front->birthDate->stat)
+            ->addField('sex', $front->sex->value, $front->sex->stat)
+            ->addField('birth_place', $front->birthLocation->value, $front->birthLocation->stat)
+            ->addField('birth_prefecture', $front->birthPrefecture->value, $front->birthPrefecture->stat)
+            ->addField('profession', $front->profession->value)
+            ->addField('issue_date', $front->issueDate->value, $front->issueDate->stat)
+            ->addField('expiry_date', $front->expiryDate->value, $front->expiryDate->stat)
+            ->addField('police_office_number', $front->policeOfficeNumber->value)
+            ->addField('size', $back->size->value, $back->size->stat)
+            ->addField('blood_type', $back->bloodType->value, $back->bloodType->stat)
+            ->addField('address', $back->address->value, $back->address->stat)
+            ->addField('tel', $back->tel->value, $back->tel->stat)
+            ->addField('particular_sign', $back->particularSign->value, $back->particularSign->stat)
+            ->addField('document_number', $back->documentNumber->value, $back->documentNumber->stat)
+            ->addField('father_first_name', $back->fatherFirstName->value)
+            ->addField('father_last_name', $back->fatherLastName->value)
+            ->addField('mother_first_name', $back->motherFirstName->value)
+            ->addField('mother_last_name', $back->motherLastName->value)
+            ->addField('person_to_contact_name', $back->personToContactName->value)
+            ->addField('person_to_contact_address', $back->personToContactAddress->value, $back->personToContactAddress->stat)
+            ->addField('person_to_contact_tel', $back->personToContactTel->value, $back->personToContactTel->stat)
+            ->addField('country', $back->country->value, $back->country->stat);
+
+        return $result;
     }
 
     private function checkTel(?string $tel): bool
