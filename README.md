@@ -128,13 +128,13 @@ $result = $processor->process('carte_identite.pdf');
 // Depuis une seule image contenant les deux faces
 $result = $processor->process('recto_verso.jpeg');
 
-echo $result->get('card_number')->value;     // 1279-364-2060
-echo $result->get('last_name')->value;        // NOUMONVI
-echo $result->get('first_name')->value;       // KOMLAN MAWUPEMON
-echo $result->get('birth_date')->value;       // 28/05/2002
-echo $result->get('birth_place')->value;      // AGOE-NYIVE
-echo $result->get('blood_type')->value;       // O+
-echo $result->get('expiry_date')->value;      // 01/11/2025
+echo $result->get('card_number')->value;     
+echo $result->get('last_name')->value;        
+echo $result->get('first_name')->value;       
+echo $result->get('birth_date')->value;       
+echo $result->get('birth_place')->value;      
+echo $result->get('blood_type')->value;       
+echo $result->get('expiry_date')->value;     
 ```
 
 **Champs CNI** : `card_number`, `last_name`, `first_name`, `birth_date`, `sex`, `birth_place`, `birth_prefecture`, `profession`, `issue_date`, `expiry_date`, `police_office_number`, `size`, `blood_type`, `address`, `tel`, `particular_sign`, `document_number`, `father_first_name`, `father_last_name`, `mother_first_name`, `mother_last_name`, `person_to_contact_name`, `person_to_contact_address`, `person_to_contact_tel`, `country`.
@@ -152,12 +152,12 @@ $result = $processor->process('permis_recto.jpeg', 'permis_verso.jpeg');
 // Depuis un PDF
 $result = $processor->process('permis.pdf');
 
-echo $result->get('license_number')->value;   // 000054246
-echo $result->get('last_name')->value;         // AKATI
-echo $result->get('first_name')->value;        // KOFFI SEBASTIEN
-echo $result->get('birth_date')->value;        // 14/01/1972
-echo $result->get('categories')->value;        // B
-echo $result->get('expiry_date')->value;       // 07/05/2024
+echo $result->get('license_number')->value;   
+echo $result->get('last_name')->value;        
+echo $result->get('first_name')->value;        
+echo $result->get('birth_date')->value;        
+echo $result->get('categories')->value;        
+echo $result->get('expiry_date')->value;       
 ```
 
 **Champs permis** : `last_name`, `first_name`, `birth_date`, `sex`, `birth_place`, `issue_date`, `expiry_date`, `license_number`, `categories`, `genre`, `blood_type`, `nationality`, `address`, `restrictions`, `cni_or_passport_number`.
@@ -175,13 +175,13 @@ $result = $processor->process('passeport.png');
 // Depuis un PDF
 $result = $processor->process('passeport.pdf');
 
-echo $result->get('passport_number')->value;  // EB737966
-echo $result->get('last_name')->value;         // BATO
-echo $result->get('first_name')->value;        // TAREKPESSOU CLOI C
-echo $result->get('birth_date')->value;        // 16/10/2000
-echo $result->get('expiry_date')->value;       // 31/07/2028
-echo $result->get('issuing_country')->value;   // TGO
-echo $result->get('nationality')->value;       // TG
+echo $result->get('passport_number')->value;  
+echo $result->get('last_name')->value;         
+echo $result->get('first_name')->value;       
+echo $result->get('birth_date')->value;        
+echo $result->get('expiry_date')->value;       
+echo $result->get('issuing_country')->value;  
+echo $result->get('nationality')->value;      
 ```
 
 **Champs passeport (MRZ)** : `passport_number`, `last_name`, `first_name`, `birth_date`, `sex`, `expiry_date`, `issuing_country`, `nationality`, `personal_number`.
@@ -212,11 +212,11 @@ $result = $processor->process('recto.jpeg', 'verso.jpeg');
 
 // Accès direct à un champ
 $cardNumber = $result->get('card_number');
-echo $cardNumber->value; // 1279-364-2060
-echo $cardNumber->stat;  // true
+echo $cardNumber->value; 
+echo $cardNumber->stat;
 
 // Raccourci pour la valeur seule
-echo $result->getValue('last_name'); // NOUMONVI
+echo $result->getValue('last_name'); 
 
 // Indicateurs globaux
 echo $result->isExpired ? 'Expiré' : 'Valide';
