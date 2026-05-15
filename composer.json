@@ -1,6 +1,6 @@
 {
     "name": "devsyril/tg-document-reader",
-    "version": "2.2.0",
+    "version": "2.1.0",
     "description": "Togolese identity documents OCR processor - extracts and validates data from CNI, passport, and driver license images",
     "type": "library",
     "license": "MIT",
