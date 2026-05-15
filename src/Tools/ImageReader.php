@@ -33,6 +33,7 @@ class ImageReader implements ImageReaderInterface
         $ocr->lang($this->language);
 
         $result = $ocr->run();
+        $result = $this->sanitizeUtf8($result);
         $result = trim($result);
         $result = $this->replaceFrenchChar($result);
         $result = $this->reduceWhiteSpace($result);
@@ -48,6 +49,35 @@ class ImageReader implements ImageReaderInterface
         return array_values(array_filter($array, function ($i) {
             return $i !== null && $i !== '' && $i !== ' ';
         }));
+    }
+
+    private function sanitizeUtf8(string $text): string
+    {
+        $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
+
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', $text);
+
+        $text = preg_replace_callback('/[\x80-\xFF]/', function (array $m): string {
+            $ord = ord($m[0]);
+
+            if ($ord === 0xA3) return 'E';
+            if ($ord >= 0xC0 && $ord <= 0xFF) {
+                return match ($ord) {
+                    0xC0, 0xC1, 0xC2, 0xC3 => 'A',
+                    0xC8, 0xC9 => 'E',
+                    0xCC, 0xCD => 'I',
+                    0xD2, 0xD3 => 'O',
+                    0xD9, 0xDA => 'U',
+                    0xC7 => 'C',
+                    0xD1 => 'N',
+                    default => '?',
+                };
+            }
+
+            return '?';
+        }, $text);
+
+        return $text;
     }
 
     private function replaceFrenchChar(string $text): string
