@@ -33,7 +33,7 @@ class ImageReader implements ImageReaderInterface
         $ocr->lang($this->language);
 
         $result = $ocr->run();
-        $result = $this->sanitizeUtf8($result);
+        // $result = $this->sanitizeUtf8($result);
         $result = trim($result);
         $result = $this->replaceFrenchChar($result);
         $result = $this->reduceWhiteSpace($result);
